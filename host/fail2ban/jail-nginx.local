@@ -1,0 +1,81 @@
+# Managed from git — host/README.md. Deployed to /etc/fail2ban/jail.d/nginx.local
+#
+# Deliberately mild. MFA (§16) and nginx rate limiting (§7) are the real
+# controls; these jails shed noise. A jail that bans aggressively on 401/403
+# locks out the legitimate user far more often than an attacker.
+
+[DEFAULT]
+# NEVER ban the admin path or our own container traffic.
+#   100.64.0.0/10        Tailscale CGNAT range — this is how SSH and RDP arrive
+#   fd7a:115c:a1e0::/48  Tailscale IPv6
+#   172.16.0.0/12        Docker bridges. nginx sees 172.18.0.1 for anything
+#                        originating on the host, so banning it would break
+#                        every local request including our own healthchecks.
+ignoreip = 127.0.0.1/8 ::1 100.64.0.0/10 fd7a:115c:a1e0::/48 172.16.0.0/12
+
+bantime  = 1h
+findtime = 10m
+maxretry = 5
+
+# NOTE: backend is deliberately NOT set in [DEFAULT]. Debian's shipped config
+# uses `backend = systemd`, and the pre-existing sshd jail depends on it —
+# Ubuntu does not write /var/log/auth.log. Overriding it globally broke that
+# jail with "Have not found any log file for sshd jail". Our file-based nginx
+# jails set it individually instead. Extend the existing config; do not
+# contradict it.
+
+[nginx-limit-req]
+enabled  = true
+backend  = auto
+port     = http,https
+filter   = nginx-limit-req
+logpath  = /mnt/data/projects/proxy-nginx/logs/error.log
+# Pairs directly with the limit_req zones in §7: an IP that repeatedly trips
+# the rate limit is not a browser having a bad day.
+maxretry = 10
+findtime = 5m
+bantime  = 1h
+
+[nginx-http-auth]
+enabled  = true
+backend  = auto
+port     = http,https
+filter   = nginx-http-auth
+logpath  = /mnt/data/projects/proxy-nginx/logs/error.log
+maxretry = 5
+
+[nginx-botsearch]
+enabled  = true
+backend  = auto
+port     = http,https
+filter   = nginx-botsearch
+logpath  = /mnt/data/projects/proxy-nginx/logs/error.log
+maxretry = 5
+
+[nginx-json-scan]
+backend  = auto
+# Custom: our access log is JSON, so no stock filter can read it. Catches an IP
+# generating a burst of 404s — probing for /wp-admin, /.env and friends.
+enabled  = true
+port     = http,https
+filter   = nginx-json-scan
+logpath  = /mnt/data/projects/proxy-nginx/logs/access.log
+maxretry = 15
+findtime = 5m
+bantime  = 2h
+
+[recidive]
+# Repeat offenders across all jails get a long ban.
+enabled  = true
+logpath  = /var/log/fail2ban.log
+bantime  = 1w
+findtime = 1d
+maxretry = 3
+
+[sshd]
+# The DEFAULT ignoreip above covers 172.16.0.0/12 because nginx sees Docker
+# bridge addresses for host-local traffic. That must NOT apply to sshd: Kasm
+# workspaces can now password-authenticate from 172.20.0.0/16, so brute force
+# from a compromised workspace has to be bannable. Tailscale and loopback stay
+# ignored — they are the admin path.
+ignoreip = 127.0.0.1/8 ::1 100.64.0.0/10 fd7a:115c:a1e0::/48

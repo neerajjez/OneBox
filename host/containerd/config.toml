@@ -1,0 +1,6 @@
+# Managed from git — host/containerd/config.toml
+# Docker 29 uses the containerd image store, so IMAGE LAYERS live under
+# containerd's root, not under Docker's data-root. Moving data-root alone left
+# 23G of images on the 48G / disk (D-017). This moves the bytes.
+disabled_plugins = ["cri"]
+root = "/mnt/data/containerd"

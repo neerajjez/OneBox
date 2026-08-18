@@ -1,0 +1,7 @@
+# Managed from git — host/README.md
+[Unit]
+Description=Kasm availability probe -> node_exporter textfile metrics
+After=docker.service
+[Service]
+Type=oneshot
+ExecStart=/mnt/data/projects/scripts/kasm-probe.sh

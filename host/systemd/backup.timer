@@ -1,0 +1,13 @@
+# Managed from git — host/README.md
+[Unit]
+Description=Nightly infrastructure backup at 03:00 UTC
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+# Survives the box being off at 03:00.
+Persistent=true
+# Avoid every timer on the host firing at once on a 2 vCPU machine.
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,11 @@
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "5"
+  },
+  "data-root": "/mnt/data/docker",
+  "live-restore": true,
+  "userland-proxy": false,
+  "no-new-privileges": true
+}

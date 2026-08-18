@@ -1,0 +1,17 @@
+[Unit]
+Description=Check Cloudflare IP ranges against our firewall allowlist
+Documentation=file:///mnt/data/projects/scripts/cf-range-drift.sh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/mnt/data/projects/scripts/cf-range-drift.sh
+SyslogIdentifier=cf-range-drift
+# Exit 2 means drift was found. That is a successful CHECK reporting a real
+# finding, not a failed unit — systemd must not mark it failed or the alert
+# and the unit state would tell contradictory stories.
+SuccessExitStatus=0 2
+
+[Install]
+WantedBy=multi-user.target

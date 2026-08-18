@@ -1,0 +1,18 @@
+[Unit]
+Description=Nightly off-site backup to OCI Object Storage
+Documentation=file:///mnt/data/projects/scripts/backup-offsite.sh
+
+[Timer]
+# 02:40 UTC — after the local backup (backup.timer) has produced a fresh set,
+# and well before the 03:00 certbot window so the two never contend for the
+# 2-vCPU budget. zstd -19 is CPU-heavy by design; overlapping it with anything
+# else on this box is how a backup starts causing the incident it protects from.
+OnCalendar=*-*-* 02:40:00
+RandomizedDelaySec=900
+
+# If the box was down at 02:40, run once shortly after boot rather than skipping
+# a night. A missed off-site backup is exactly the gap that matters.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

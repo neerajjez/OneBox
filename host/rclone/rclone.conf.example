@@ -1,0 +1,21 @@
+# rclone remote for OCI Object Storage (S3-compatible API).
+# INSTALL AS: /etc/rclone/rclone.conf   mode 0600, root-owned.
+# The real file holds live credentials and is never committed.
+#
+# Endpoint form:  https://<namespace>.compat.objectstorage.<region>.oraclecloud.com
+# The namespace is NOT the tenancy name — find it under Object Storage details.
+#
+# IMPORTANT: OCI's S3 Compatibility API only sees buckets in ONE compartment,
+# set under Tenancy -> Object Storage Settings -> "Designated Compartment for
+# Amazon S3 Compatibility API". A bucket in any other compartment returns
+# NoSuchBucket even with valid credentials, and `lsd` lists nothing at all.
+
+[oci]
+type = s3
+provider = Other
+env_auth = false
+access_key_id = CUSTOMER_SECRET_KEY_ACCESS_KEY
+secret_access_key = CUSTOMER_SECRET_KEY_SECRET
+region = ap-mumbai-1
+endpoint = https://NAMESPACE.compat.objectstorage.ap-mumbai-1.oraclecloud.com
+acl = private

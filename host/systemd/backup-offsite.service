@@ -1,0 +1,29 @@
+[Unit]
+Description=Off-site backup to OCI Object Storage (rclone)
+Documentation=file:///mnt/data/projects/scripts/backup-offsite.sh
+After=network-online.target docker.service
+Wants=network-online.target
+# Unlike certbot, this one genuinely needs the network up: it uploads to a
+# remote endpoint and there is no later retry within the run.
+
+[Service]
+Type=oneshot
+ExecStart=/mnt/data/projects/scripts/backup-offsite.sh
+
+# zstd -19 on 2 vCPU will happily eat the box. Nice it down so a backup can
+# never starve nginx, Prometheus, or a live Kasm session — the backup finishing
+# ten minutes later is free; a user-visible stall is not.
+Nice=15
+IOSchedulingClass=idle
+CPUQuota=120%
+
+# The script writes JSON events on stdout (rule 10). Tag them so journald
+# filtering matches every other emitter here.
+SyslogIdentifier=backup-offsite
+
+# A failed off-site backup must be loud. Silence here is indistinguishable from
+# success until the day you need to restore.
+ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = "0" || logger -t backup-offsite -p daemon.err "off-site backup FAILED with $EXIT_STATUS"'
+
+[Install]
+WantedBy=multi-user.target

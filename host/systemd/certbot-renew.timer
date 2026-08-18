@@ -1,0 +1,23 @@
+[Unit]
+Description=Twice-daily Let's Encrypt renewal check
+Documentation=file:///mnt/data/projects/docs/PHASE-11.md
+
+[Timer]
+# Twice a day is the Let's Encrypt recommendation. A cert enters its renewal
+# window 30 days before expiry, so this gives ~60 chances to succeed before
+# anything is at risk — enough that a few failed days go unnoticed by users
+# but are still caught by the expiry alert.
+OnCalendar=*-*-* 03,15:00:00
+
+# Spread load off the hour. Let's Encrypt explicitly asks clients not to all
+# hammer at :00, and `certbot renew` has its own sleep which the service
+# disables (--no-random-sleep-on-renew) precisely so this is the single, visible
+# source of jitter rather than two stacked ones.
+RandomizedDelaySec=3600
+
+# Survive downtime: if the box was off when the timer should have fired, run it
+# shortly after boot rather than silently skipping to the next window.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Collect per-container stats every minute
+
+[Timer]
+OnBootSec=2min
+# 60s, not 30s: each run costs ~2.6s of `docker stats`, so 30s would spend ~9%
+# of a process permanently on measurement. One sample a minute is ample for
+# attribution and trend, which is what this is for.
+OnUnitActiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

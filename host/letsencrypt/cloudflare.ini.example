@@ -1,0 +1,33 @@
+# Cloudflare API credentials for certbot's DNS-01 challenge.
+#
+# INSTALL AS:  /etc/letsencrypt/cloudflare.ini   mode 0600, owned by root
+#
+#   sudo install -m 600 -o root -g root /dev/null /etc/letsencrypt/cloudflare.ini
+#   sudo nano /etc/letsencrypt/cloudflare.ini
+#
+# certbot refuses to run if this file is group- or world-readable, and
+# scripts/cert-issue.sh checks the mode before certbot ever sees it.
+#
+# ---------------------------------------------------------------------------
+# CREATING THE TOKEN
+# ---------------------------------------------------------------------------
+# Cloudflare dashboard -> My Profile -> API Tokens -> Create Token
+#   Template:        "Edit zone DNS"
+#   Permissions:     Zone / DNS  / Edit
+#                    Zone / Zone / Read
+#   Zone Resources:  Include / Specific zone / yourdomain.com
+#
+# Optionally restrict by client IP to this host's public address (203.0.113.10).
+# That is worth doing: a leaked token then only works from here.
+#
+# Use a SCOPED TOKEN, never the Global API Key. The Global key authenticates as
+# your whole account — every zone, billing, and registrar included — cannot be
+# limited to one permission, and revoking it breaks everything else at once.
+# A scoped token can edit DNS on one zone and nothing more.
+#
+# This value is a live credential. It never goes in git — `.gitignore` covers
+# `.env*`, `*.key` and `*.pem`, but this filename is NOT automatically covered,
+# which is exactly why the real file lives in /etc/letsencrypt and only this
+# example is committed.
+
+dns_cloudflare_api_token = PASTE_YOUR_SCOPED_TOKEN_HERE

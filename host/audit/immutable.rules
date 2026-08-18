@@ -1,0 +1,6 @@
+## Managed from git — see host/README.md
+## Applied ONLY at the Phase 1 reboot gate, after hardening.rules is verified.
+## -e 2 locks the audit ruleset until the next reboot: root cannot quietly
+## disable auditing, and an attempt is itself a signal. The cost is that rules
+## cannot be changed without rebooting, so it goes last.
+-e 2

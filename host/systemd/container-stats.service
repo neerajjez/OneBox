@@ -1,0 +1,17 @@
+[Unit]
+Description=Export per-container CPU/memory to node_exporter textfile
+Documentation=file:///mnt/data/projects/scripts/container-stats.sh
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/mnt/data/projects/scripts/container-stats.sh
+# `docker stats` takes ~2.6s on this host. Nice it so a stats collection can
+# never contend with nginx or a live Kasm session.
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=40
+
+[Install]
+WantedBy=multi-user.target

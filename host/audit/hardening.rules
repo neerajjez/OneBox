@@ -1,0 +1,41 @@
+## Managed from git — see host/README.md
+## Narrow and defensible. A broad syscall ruleset would eat a 2-vCPU box;
+## this watches identity, privilege, and the config that grants both.
+
+-D
+-b 8192
+--backlog_wait_time 60000
+
+## Identity
+-w /etc/passwd  -p wa -k identity
+-w /etc/shadow  -p wa -k identity
+-w /etc/group   -p wa -k identity
+-w /etc/gshadow -p wa -k identity
+
+## Privilege escalation policy
+-w /etc/sudoers   -p wa -k privilege
+-w /etc/sudoers.d/ -p wa -k privilege
+
+## Remote access configuration
+-w /etc/ssh/sshd_config -p wa -k sshd
+-w /etc/xrdp/           -p wa -k xrdp
+
+## Persistence mechanisms
+-w /etc/systemd/system/ -p wa -k systemd
+-w /etc/cron.d/         -p wa -k cron
+-w /etc/crontab         -p wa -k cron
+
+## This project's own infrastructure config
+-w /mnt/data/projects/host/ -p wa -k infra-config
+-w /etc/docker/                  -p wa -k infra-config
+
+## The Docker socket is root on the host (threat T5) — access must be attributable
+-w /var/run/docker.sock -p rwxa -k docker-socket
+
+## Commands run as root by a real user
+-a always,exit -F arch=b64 -S execve -F euid=0 -F auid>=1000 -F auid!=unset -k root-exec
+
+## NOTE: the immutability flag (-e 2) lives in `immutable.rules`, applied
+## separately at the Phase 1 reboot gate. Loading it here would lock the
+## ruleset until reboot, making a mistake unfixable on a host we must not
+## reboot unattended.

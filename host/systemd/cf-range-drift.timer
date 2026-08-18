@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily Cloudflare IP range drift check
+
+[Timer]
+# Daily is right: Cloudflare changes these rarely, and a range addition takes
+# effect gradually as traffic is routed to new edges. A day of detection lag is
+# acceptable; a week is not.
+OnCalendar=*-*-* 06:20:00
+RandomizedDelaySec=1800
+Persistent=true
+
+[Install]
+WantedBy=timers.target

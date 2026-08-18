@@ -1,0 +1,16 @@
+# Managed from git — host/README.md
+[Unit]
+Description=Nightly infrastructure backup
+Documentation=file:///mnt/data/projects/docs/PLAN.md
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# The passphrase lives in a 0600 file, not in this unit — a unit file is
+# world-readable and `systemctl cat` would print the secret.
+EnvironmentFile=/mnt/data/projects/.backup-env
+ExecStart=/mnt/data/projects/scripts/backup.sh
+# Output is canonical JSON (rule 10); journald captures it.
+StandardOutput=journal
+StandardError=journal

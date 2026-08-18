@@ -1,0 +1,38 @@
+[Unit]
+Description=Renew Let's Encrypt certificates (DNS-01 via Cloudflare)
+Documentation=file:///mnt/data/projects/docs/PHASE-11.md
+# No network-online.target dependency: the timer fires twice daily, and a renewal
+# that lands during a brief network blip simply retries on the next tick. Ordering
+# after the network would delay boot for a job that is never urgent.
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+
+# `certbot renew` is a no-op unless a certificate is inside its 30-day renewal
+# window, so running it twice a day is cheap and is what Let's Encrypt recommends.
+# The deploy hook is configured in the renewal conf at issuance time and only
+# fires when something was actually renewed.
+ExecStart=/usr/bin/certbot renew --quiet --no-random-sleep-on-renew
+
+# If renewal fails, say so loudly in the journal. A silent failure here surfaces
+# ~30 days later as an expired certificate on a public site.
+ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = "0" || logger -t certbot-renew -p daemon.err "renewal FAILED with $EXIT_STATUS"'
+
+# --- hardening: certbot needs to write /etc/letsencrypt and talk to the network.
+# It has no business touching anything else.
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/etc/letsencrypt /var/log/letsencrypt /var/lib/letsencrypt
+ReadWritePaths=/mnt/data/projects/proxy-nginx/certs
+ReadWritePaths=/mnt/data/backups/certs
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ProtectHome=true
+NoNewPrivileges=false
+# NoNewPrivileges must stay false: the deploy hook calls `docker exec` to reload
+# nginx, and docker group membership is resolved through the socket. Setting it
+# true here would break the reload with a confusing permission error.
+
+[Install]
+WantedBy=multi-user.target
