@@ -157,83 +157,32 @@ Costs nothing beyond the VPS if you use free tiers throughout.
 
 ## Setup
 
-### 1. Bootstrap a fresh server
+**Full step-by-step runbook: [`SETUP.md`](SETUP.md)** — bare server to live
+platform, ~60–90 minutes, with a verification check after every step.
 
-```bash
-sudo BOOTSTRAP_PASSWORD='<a-real-password>' ./bootstrap/bootstrap-ubuntu.sh
+```
+1  create server            public :22 open temporarily
+2  clone repo
+3  bootstrap                Docker, Tailscale, XRDP, hardened SSH
+4  tailscale up             join the mesh
+5  verify tailnet SSH       ← then close public :22
+6  .env + render-env.sh     one file, all credentials
+7  create networks          proxy-net + internal backend-net
+8  nginx + placeholder TLS  breaks the cert/nginx chicken-and-egg
+9  DNS at Cloudflare        proxied, SSL mode Full
+10 real certificate         DNS-01 → then switch to Full (Strict)
+11 monitoring + alerts      send yourself a test email
+12 lock to Cloudflare       cloud firewall + DOCKER-USER
+13 backups + restore test   not a backup until the test passes
+14 Kasm                     optional
+15 audit + write STATE.md
 ```
 
-Installs Docker (official APT repo), Tailscale, XFCE + XRDP, hardened SSH,
-fail2ban, and unattended upgrades. Idempotent. See
-[`bootstrap/README.md`](bootstrap/README.md).
-
-> **It refuses to run on a host that already looks provisioned.** It rewrites
-> `sshd_config`; on a live server that is a lockout risk, not a convenience.
-
-Then join your tailnet — deliberately *not* automated, because silently joining
-a mesh network is not a script's decision to make:
-
-```bash
-sudo tailscale up
-```
-
-### 2. Configure
-
-One file for everything:
-
-```bash
-cp .env.example .env
-chmod 600 .env
-$EDITOR .env
-sudo ./scripts/render-env.sh
-```
-
-`render-env.sh` generates every per-project `.env` from that one file, so there
-is a single place to edit and no chance of two files disagreeing. Generated
-files carry a `DO NOT EDIT` header.
-
-### 3. Deploy
-
-```bash
-docker network create proxy-net
-docker network create --internal --subnet 10.89.0.0/24 --gateway 10.89.0.1 backend-net
-
-docker compose -f proxy-nginx/compose.yml up -d
-docker compose -f monitoring/compose.yml up -d
-docker compose -f alert-bridge/compose.yml up -d
-```
-
-The `backend-net` subnet is pinned deliberately: `node_exporter` binds to that
-gateway address so Prometheus can scrape it, and Docker reassigns bridge subnets
-on recreation. An unpinned subnet silently breaks the scrape later.
-
-### 4. Get TLS
-
-```bash
-sudo ./scripts/cert-issue.sh --staging   # rehearse first — LE rate-limits failures
-sudo ./scripts/cert-issue.sh
-sudo systemctl enable --now certbot-renew.timer
-```
-
-### 5. Lock the front door
-
-Restrict inbound 443 to Cloudflare in your cloud firewall, then on the host:
-
-```bash
-sudo ./scripts/apply-cf-firewall.sh
-sudo ./scripts/cf-range-drift.sh          # daily via timer
-```
-
-### 6. Verify — do not assume
-
-```bash
-./scripts/preflight.sh      # pre-change gate
-./scripts/port-audit.sh     # what is ACTUALLY listening
-sudo ./scripts/backup.sh
-sudo ./scripts/restore-test.sh   # a backup is not a backup until this passes
-```
-
----
+The order is load-bearing in three places: SSH hardening runs last inside
+bootstrap so a broken sshd leaves you a working machine rather than a half-built
+one; the certificate needs nginx running, and nginx needs *a* certificate, so
+step 8 uses a throwaway; and the Cloudflare lockdown must come after TLS,
+because it is what makes DNS-01 mandatory.
 
 ## The four traps this codebase exists to remember
 
