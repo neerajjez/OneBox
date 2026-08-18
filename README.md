@@ -67,6 +67,12 @@ targets up, and nginx request rate — all on a 2-vCPU box.
 
 Firefox, VS Code, a terminal, or a full Ubuntu desktop — no client to install.
 
+![Kasm desktop over RDP](docs/screenshots/03-kasm-desktop.png)
+
+A session in progress: the host's XFCE desktop over RDP, rendered in the
+browser. The address in the title bar is `172.20.0.1` — the Docker bridge
+gateway, reachable only from inside this host.
+
 ### The delivery chain at `/`
 
 ![Test site](docs/screenshots/01-test-site.png)

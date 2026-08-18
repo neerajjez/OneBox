@@ -1,13 +1,15 @@
 # Screenshots
 
 Taken from a live deployment. **Redacted before publishing** — the real domain
-and data-mount path were removed from the dashboard capture. Where you see a
+and data-mount path were removed from the dashboard capture, and the desktop
+user's display name from the RDP capture. Where you see a
 solid block, that is a deliberate redaction, not a rendering fault.
 
 | | What it shows |
 |---|---|
 | `01-test-site.png` | The placeholder site at `/`, confirming the delivery chain end to end: nginx, TLS termination, Docker networking, and request-ID propagation |
 | `02-grafana-overview.png` | The Grafana overview at `/monitoring/` — host health, load per core, network, filesystem, all nine scrape targets up, nginx throughput |
+| `03-kasm-desktop.png` | An XFCE desktop reached over RDP from inside a browser-based Kasm workspace — the host's own desktop, not a container's |
 | `05-kasm-workspaces.png` | The Kasm launcher at `/webrdp/`, offering Firefox, VS Code, a terminal and a full Ubuntu desktop |
 
 ## A note on the dashboard screenshot
