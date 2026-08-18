@@ -1,0 +1,44 @@
+# Managed from git. docs/PLAN.md §13.
+# Brevo credentials come from monitoring/.env — never inline here.
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: '${BREVO_SMTP_HOST}:${BREVO_SMTP_PORT}'
+  smtp_from: '${ALERT_SENDER}'
+  smtp_auth_username: '${BREVO_SMTP_LOGIN}'
+  smtp_require_tls: true
+
+route:
+  receiver: email-default
+  group_by: ['alertname', 'severity']
+  group_wait: 30s          # a cascade arrives as one email, not five
+  group_interval: 5m
+  repeat_interval: 12h     # anti-fatigue: hourly repeats get filtered by humans
+  routes:
+    - matchers: [ severity="critical" ]
+      receiver: email-critical
+      group_wait: 10s
+      repeat_interval: 4h
+
+inhibit_rules:
+  # A dead host should not also page about its disk.
+  - source_matchers: [ alertname="TargetDown", severity="critical" ]
+    target_matchers: [ severity="warning" ]
+    equal: ['instance']
+  - source_matchers: [ alertname="DiskSpaceCritical" ]
+    target_matchers: [ alertname="DiskSpaceLow" ]
+    equal: ['instance', 'mountpoint']
+
+receivers:
+  - name: email-default
+    webhook_configs:
+      - url: 'http://alert-bridge:9095/alert'
+        send_resolved: true
+        # A non-2xx from the bridge increments
+        # alertmanager_notifications_failed_total, which AlertDeliveryFailing
+        # watches — so a broken bridge alerts rather than swallowing alerts.
+        max_alerts: 0
+  - name: email-critical
+    webhook_configs:
+      - url: 'http://alert-bridge:9095/alert'
+        send_resolved: true
+        max_alerts: 0

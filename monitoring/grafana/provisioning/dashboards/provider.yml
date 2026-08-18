@@ -1,0 +1,12 @@
+apiVersion: 1
+providers:
+  - name: 'infra'
+    orgId: 1
+    folder: 'Infrastructure'
+    type: file
+    disableDeletion: true
+    # Dashboards are provisioned from git. Hand-editing in the UI is lost on
+    # container replacement, and reproducibility is the whole premise here.
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

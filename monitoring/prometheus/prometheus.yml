@@ -1,0 +1,103 @@
+# Managed from git. docs/PLAN.md §11.
+global:
+  scrape_interval:     15s
+  scrape_timeout:      10s
+  evaluation_interval: 15s
+  external_labels:
+    env: vps-prod
+    instance: onebox-prod
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+        labels: { service: prometheus }
+
+  # node_exporter runs on the HOST. 172.19.0.1 is backend-net's gateway,
+  # pinned in D-012 so this address cannot drift.
+  - job_name: node
+    static_configs:
+      - targets: ['172.19.0.1:9100']
+        labels: { service: host }
+
+  - job_name: grafana
+    # serve_from_sub_path=true prefixes EVERY Grafana path, metrics included.
+    # Scraping /metrics gets a redirect to the public root_url, which fails.
+    metrics_path: /monitoring/metrics
+    static_configs:
+      - targets: ['grafana:3000']
+        labels: { service: grafana }
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: ['alertmanager:9093']
+        labels: { service: alertmanager }
+
+  # nginx's internal :8080 listener (conf.d/01-health.conf) exposes stub_status.
+  # Scraped via the nginx exporter sidecar.
+  - job_name: nginx
+    static_configs:
+      - targets: ['nginx-exporter:9113']
+        labels: { service: nginx }
+
+  # --- blackbox: probe endpoints from outside the application -----------------
+  # The relabel dance is the standard blackbox pattern and is not optional:
+  # __address__ must become the BLACKBOX host, while the URL under test travels
+  # as the ?target= param. Getting this backwards makes Prometheus scrape the
+  # target directly and silently report nonsense.
+  - job_name: blackbox-origin
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://nginx/
+          - https://nginx/webrdp/
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  - job_name: blackbox-origin-redirect
+    metrics_path: /probe
+    params:
+      module: [http_2xx_or_redirect]
+    static_configs:
+      - targets:
+          - https://nginx/monitoring/
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Through Cloudflare. Compared with blackbox-origin, this separates
+  # "origin down" from "Cloudflare cannot reach the origin".
+  - job_name: blackbox-public
+    metrics_path: /probe
+    scrape_interval: 60s
+    params:
+      module: [http_public]
+    static_configs:
+      - targets:
+          - https://yourdomain.com/
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

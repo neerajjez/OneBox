@@ -1,0 +1,284 @@
+# Managed from git. docs/PLAN.md §11.
+# Thresholds are adjusted from the original brief where its values would
+# misfire on THIS host — reasoning is inline. Every alert is forced at least
+# once in Phase 6; an alert that has never fired is an untested alert.
+
+groups:
+  - name: host
+    rules:
+      - alert: HostCPUSaturated
+        # Brief said >95% for 10m. On 2 vCPU a single Kasm workspace can
+        # legitimately sit at 95% for ten minutes — that is the machine
+        # working, not failing. 90%/15m signals a genuine runaway.
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "CPU above 90% for 15m on {{ $labels.instance }}"
+          description: "Currently {{ $value | printf \"%.1f\" }}%."
+
+      - alert: HostLoadHigh
+        expr: node_load5 / count(count by(cpu) (node_cpu_seconds_total)) > 2
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "Load per core above 2 for 15m"
+          description: "Work is queueing — this is what users feel."
+
+      - alert: HostMemoryPressure
+        # MemAvailable, not MemFree: page cache is reclaimable, and this box
+        # runs ~6 GB of cache. Alerting on MemFree would fire constantly.
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 85
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Memory above 85% for 10m"
+
+      - alert: HostSwapInUse
+        # The early warning that the §22 resource budget is wrong. Swap exists
+        # as a grace period (D-008); swap being CONSUMED means the grace period
+        # is being spent. Without this the swap silently absorbs a problem
+        # until it cannot.
+        expr: node_memory_SwapTotal_bytes > 0 and (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes) < 0.5
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Over half of swap is in use"
+          description: "The memory budget is likely wrong. Check container limits before raising them."
+
+      - alert: HostOOMKill
+        # The §22 canary. If this fires, the resource budget is wrong — and the
+        # victim may be Prometheus itself, which is why external monitoring
+        # exists (§H).
+        expr: increase(node_vmstat_oom_kill[10m]) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: "OOM killer fired on {{ $labels.instance }}"
+
+      - alert: DiskSpaceLow
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"} < 0.15
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.mountpoint }} below 15% free"
+
+      - alert: DiskSpaceCritical
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"} < 0.05
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.mountpoint }} below 5% free"
+
+      - alert: DiskWillFillIn24h
+        # Worth more than either threshold above: catches a runaway log at 40%
+        # used, while a static 85% alert only fires when hours remain.
+        expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}[6h], 24*3600) < 0
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.mountpoint }} projected full within 24h"
+
+      - alert: FilesystemReadOnly
+        expr: node_filesystem_readonly{fstype!~"tmpfs|overlay|squashfs"} == 1
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.mountpoint }} has gone read-only"
+
+  - name: availability
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 3m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.job }} ({{ $labels.service }}) is down"
+
+      - alert: ContainerRestartLoop
+        expr: increase(node_systemd_unit_state{name="docker.service",state="active"}[1h]) > 3
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Docker has restarted repeatedly"
+
+  - name: backup
+    rules:
+      - alert: BackupStale
+        # A backup that stops silently is the DEFAULT failure mode. Fed by the
+        # backup script writing a node_exporter textfile metric (§25).
+        expr: time() - backup_last_success_timestamp_seconds > 86400 * 2
+        for: 1h
+        labels: { severity: critical }
+        annotations:
+          summary: "No successful backup in over 48h"
+
+  - name: alerting-path
+    rules:
+      - alert: AlertDeliveryFailing
+        # The most dangerous silent failure in the stack: alerts fire, nobody
+        # is told, and everything LOOKS fine. Verified in Phase 6 that a bad
+        # credential surfaces here rather than vanishing.
+        expr: increase(alertmanager_notifications_failed_total[30m]) > 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Alertmanager cannot deliver notifications"
+          description: "{{ $labels.integration }} failing ({{ $labels.reason }}). Alerts are firing but not reaching anyone."
+
+      - alert: AlertmanagerNotConnected
+        expr: prometheus_notifications_alertmanagers_discovered < 1
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Prometheus has no Alertmanager"
+
+  - name: kasm
+    rules:
+      - alert: KasmDown
+        # Probed THROUGH nginx at /webrdp/, so this covers the path a user
+        # actually takes. Kasm exposes no Prometheus endpoint (verified: all
+        # candidate paths 404), so §26c's probe approach is used instead of a
+        # bespoke exporter.
+        expr: kasm_up == 0
+        for: 3m
+        labels: { severity: critical }
+        annotations:
+          summary: "Kasm is not serving at /webrdp/"
+          description: "Remote access is down. Check `docker ps --filter name=kasm_`."
+
+      - alert: KasmContainerUnhealthy
+        expr: kasm_containers_healthy < kasm_containers_total
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $value }} Kasm container(s) healthy of {{ with query \"kasm_containers_total\" }}{{ . | first | value }}{{ end }}"
+
+      - alert: KasmProbeStale
+        # The probe itself failing is indistinguishable from Kasm being fine,
+        # unless we watch the metric's freshness.
+        expr: time() - timestamp(kasm_up) > 600
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Kasm probe has not reported in 10 minutes"
+
+      - alert: BackupOffsiteStale
+        # Local backups die with the VPS — the exact scenario they exist for.
+        # This alert is the difference between "off-site is configured" and
+        # "off-site is actually working".
+        expr: absent(backup_offsite_last_success_timestamp_seconds)
+              or time() - backup_offsite_last_success_timestamp_seconds > 86400 * 3
+        for: 1h
+        labels: { severity: warning }
+        annotations:
+          summary: "No successful off-site backup in 3 days (or never configured)"
+          description: "Local backups do not survive loss of this host. See D-014."
+
+      - alert: XrdpOrphanedSessions
+        # Orphaned X locks are what make xrdp "work sometimes": a dead session's
+        # D-Bus/agent blocks the next login, and the user sees the session close
+        # immediately after a correct password. Catch it before they do.
+        expr: xrdp_orphan_locks > 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $value }} orphaned xrdp X lock(s) — logins may fail"
+          description: "A stale display blocks new sessions. See kasm/notes/xrdp-reliability.md."
+
+      # --- TLS -------------------------------------------------------------
+      # Written by scripts/cert-deploy-hook.sh on every successful renewal.
+      # Two separate alerts on purpose: 21 days is "renewal is not working,
+      # investigate this week"; 7 days is "act now".
+      - alert: TLSCertExpiringSoon
+        expr: (nginx_cert_expiry_seconds - time()) / 86400 < 21
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "TLS certificate expires in {{ $value | printf \"%.0f\" }} days"
+          description: >-
+            Renewal runs twice daily and starts 30 days out, so reaching 21 days
+            means roughly 18 renewal attempts have already failed silently.
+            Check: journalctl -u certbot-renew --since '7 days ago'
+
+      - alert: TLSCertExpiringCritical
+        expr: (nginx_cert_expiry_seconds - time()) / 86400 < 7
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "TLS certificate expires in {{ $value | printf \"%.0f\" }} days"
+          description: >-
+            Issue by hand now: scripts/cert-issue.sh
+            A public site serving an expired certificate is a hard outage for
+            every visitor, not a degradation.
+
+      # The metric vanishing is itself a failure — it means no successful
+      # deploy has happened since node_exporter's textfile dir was last cleared.
+      - alert: TLSCertMetricMissing
+        expr: absent(nginx_cert_expiry_seconds)
+        for: 6h
+        labels:
+          severity: warning
+        annotations:
+          summary: "No TLS certificate expiry metric is being reported"
+          description: >-
+            scripts/cert-deploy-hook.sh writes this on renewal. Absence means
+            either no renewal has ever run, or the textfile collector path is
+            wrong — both hide a genuinely expiring certificate.
+
+      # --- blackbox: two alerts only ---------------------------------------
+      # Deliberately NOT alerting on probe latency or on probe_ssl_earliest_cert
+      # _expiry. Latency on a 2-vCPU box fluctuates with any backup or Kasm
+      # session and would page on normal behaviour; the public cert is
+      # Cloudflare's to renew and we would be paging about someone else's job.
+      # The origin cert already has its own alerts fed by the certbot hook.
+
+      - alert: BlackboxOriginProbeFailed
+        expr: probe_success{job=~"blackbox-origin.*"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Origin endpoint {{ $labels.instance }} is not serving"
+          description: >-
+            nginx answers this path directly. Five minutes of failure means a
+            real outage, not a blip — every other target can look healthy while
+            this fails, which is the entire reason this probe exists.
+
+      - alert: BlackboxPublicUnreachable
+        expr: probe_success{job="blackbox-public"} == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "yourdomain.com is unreachable through Cloudflare"
+          description: >-
+            If BlackboxOriginProbeFailed is quiet at the same time, the origin is
+            fine and the fault is between Cloudflare and this host — most likely
+            the ingress allowlist no longer matches Cloudflare's published
+            ranges. Check scripts/cf-range-drift.sh output first.
+
+      - alert: CloudflareRangeDrift
+        expr: cloudflare_ranges_drift > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cloudflare published {{ $value }} IP range(s) we do not allow"
+          description: >-
+            Update the OCI NSG, the DOCKER-USER rules, and
+            host/cloudflare/ips-v4.txt. Until then some Cloudflare edges cannot
+            reach this origin and the visitors routed to them see 522 — which
+            will not reproduce from your own machine.
+
+      - alert: CloudflareRangeCheckFailing
+        expr: cloudflare_ranges_check_success == 0
+        for: 3h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cannot fetch Cloudflare's published IP ranges"
+          description: >-
+            The drift check is blind. It does not reset the drift gauge on
+            failure, so an old value may be stale rather than current.

@@ -1,0 +1,63 @@
+# Blackbox exporter modules.
+#
+# Kept deliberately small. Every module here is one we actually scrape; unused
+# modules are surface area that drifts out of date and confuses the next reader.
+
+modules:
+
+  # Public paths served through nginx. We probe the ORIGIN directly (not through
+  # Cloudflare) because this must answer "is my server serving?", not "is
+  # Cloudflare's cache serving?". A cached 200 from the edge would mask a dead
+  # origin for as long as the TTL.
+  http_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      valid_status_codes: [200]
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      method: GET
+      follow_redirects: false
+      preferred_ip_protocol: ip4
+      # The origin presents a cert for yourdomain.com; probing by container
+      # name would fail hostname verification. Setting the SNI/Host explicitly
+      # keeps verification ON rather than disabling it, which is the lazy fix.
+      tls_config:
+        insecure_skip_verify: false
+        server_name: yourdomain.com
+      headers:
+        Host: yourdomain.com
+
+  # Endpoints that legitimately redirect (Grafana sends / to /login).
+  # A separate module rather than widening http_2xx: accepting 3xx everywhere
+  # would stop us noticing if a 200 endpoint silently became a redirect.
+  http_2xx_or_redirect:
+    prober: http
+    timeout: 10s
+    http:
+      valid_status_codes: [200, 301, 302, 303, 307, 308]
+      method: GET
+      follow_redirects: false
+      preferred_ip_protocol: ip4
+      tls_config:
+        insecure_skip_verify: false
+        server_name: yourdomain.com
+      headers:
+        Host: yourdomain.com
+
+  # Reaches the site the way the internet does — through Cloudflare. Compared
+  # against the origin probe, this is what distinguishes "my server is down"
+  # from "Cloudflare cannot reach my server", which are different incidents
+  # with different fixes.
+  http_public:
+    prober: http
+    timeout: 15s
+    http:
+      valid_status_codes: [200]
+      method: GET
+      follow_redirects: true
+      preferred_ip_protocol: ip4
+
+  # Plain TCP reachability, used for the host's own sshd over the tailnet.
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
