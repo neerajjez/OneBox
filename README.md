@@ -49,6 +49,35 @@ Plus, not user-visible:
 
 ---
 
+## What it looks like
+
+Screenshots from a live deployment, redacted — the real domain, hostname, admin
+user and tailnet address are blocked out. More in
+[`docs/screenshots/`](docs/screenshots/).
+
+### The monitoring dashboard at `/monitoring/`
+
+![Grafana overview](docs/screenshots/02-grafana-overview.png)
+
+Host health, load per core, network throughput, filesystem, nine scrape targets
+up, nginx request rate.
+
+### The whole platform, and only one public port
+
+![Container stack](docs/screenshots/04-container-stack.png)
+
+Read the `PORTS` column. Every service shows a bare port — exposed to other
+containers only. Exactly one line reads `0.0.0.0:443->443/tcp`, and that is
+nginx. One public entry point, everything else internal.
+
+### A Linux desktop in the browser at `/webrdp/`
+
+![Kasm workspaces](docs/screenshots/05-kasm-workspaces.png)
+
+![Kasm desktop over RDP](docs/screenshots/03-kasm-desktop.png)
+
+---
+
 ## Architecture
 
 ```
