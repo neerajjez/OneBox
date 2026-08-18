@@ -1,0 +1,39 @@
+# alert-bridge — Alertmanager webhook -> Brevo v3 API.
+# See src/server.js for why this exists rather than native SMTP.
+
+services:
+  alert-bridge:
+    build: .
+    image: alert-bridge:1.1.0
+    container_name: alert-bridge
+    restart: unless-stopped
+    expose:
+      - "9095"
+    networks:
+      - backend-net   # Alertmanager reaches it here
+      - proxy-net     # needs egress to api.brevo.com; backend-net is internal
+    env_file: [ ../monitoring/.env ]
+    environment:
+      TZ: UTC
+    read_only: true
+    tmpfs: [ /tmp ]
+    security_opt: [ "no-new-privileges:true" ]
+    cap_drop: [ ALL ]
+    healthcheck:
+      # 503 unless the API key, sender and recipient are all present, so a
+      # misconfigured bridge shows as unhealthy instead of failing at 3am.
+      test: ["CMD", "wget", "-q", "--spider", "-T", "3", "http://127.0.0.1:9095/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:   { cpus: "0.10", memory: 96M }
+        reservations: { memory: 32M }
+    oom_score_adj: -500   # part of the alerting path; protect like the rest
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "5", tag: "{{.Name}}" } }
+
+networks:
+  backend-net: { external: true }
+  proxy-net:   { external: true }
