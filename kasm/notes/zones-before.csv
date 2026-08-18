@@ -1,0 +1,2 @@
+zone_id,zone_name,load_strategy,prioritize_static_agents,search_alternate_zones,allow_origin_domain,upstream_auth_address,proxy_connections,proxy_rdp_client_connections,verify_rdp_client_ip,enable_rdp_https_gw,enable_rdp_https_gw_dlp,proxy_hostname,proxy_path,proxy_port,proxy_rdp_hostname,proxy_rdp_port,primary_manager_id
+04813564-0a8d-4065-8b7b-165c03a3e835,default,least_load,t,t,$request_host$,proxy,t,t,f,t,t,$request_host$,desktop,8443,$request_host$,443,ff69312e-2d5e-45dc-898a-51152920387f
