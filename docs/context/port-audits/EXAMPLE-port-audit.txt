@@ -1,0 +1,57 @@
+# Port audit — 20260816T143319Z on onebox-prod
+
+## Non-loopback listeners
+
+udp UNCONN 0      0                          0.0.0.0:43044 0.0.0.0:* users:(("avahi-daemon",pid=49178,fd=14))                
+udp UNCONN 0      0                          0.0.0.0:5353  0.0.0.0:* users:(("avahi-daemon",pid=49178,fd=12))                
+udp UNCONN 0      0                10.0.0.10%enp0s6:68    0.0.0.0:* users:(("systemd-network",pid=2794,fd=22))              
+udp UNCONN 0      0                          0.0.0.0:41641 0.0.0.0:* users:(("tailscaled",pid=28046,fd=19))                  
+udp UNCONN 0      0                             [::]:5353     [::]:* users:(("avahi-daemon",pid=49178,fd=13))                
+udp UNCONN 0      0                             [::]:38801    [::]:* users:(("avahi-daemon",pid=49178,fd=15))                
+udp UNCONN 0      0                             [::]:41641    [::]:* users:(("tailscaled",pid=28046,fd=11))                  
+tcp LISTEN 0      4096                       0.0.0.0:80    0.0.0.0:* users:(("dockerd",pid=414558,fd=97))                    
+tcp LISTEN 0      4096                       0.0.0.0:22    0.0.0.0:* users:(("sshd",pid=57866,fd=3),("systemd",pid=1,fd=372))
+tcp LISTEN 0      4096                       0.0.0.0:443   0.0.0.0:* users:(("dockerd",pid=414558,fd=98))                    
+tcp LISTEN 0      4096                    172.19.0.1:9100  0.0.0.0:* users:(("node_exporter",pid=79583,fd=6))                
+tcp LISTEN 0      4096               100.64.0.10:39604 0.0.0.0:* users:(("tailscaled",pid=28046,fd=24))                  
+tcp LISTEN 0      4096                          [::]:22       [::]:* users:(("sshd",pid=57866,fd=4),("systemd",pid=1,fd=373))
+tcp LISTEN 0      2                                *:3389        *:* users:(("xrdp",pid=577395,fd=11))                       
+tcp LISTEN 0      4096   [fd7a:115c:a1e0::4a01:f7be]:56020    [::]:* users:(("tailscaled",pid=28046,fd=27))                  
+
+## Published container ports
+
+userkasm.loc_7fba6234	4901/tcp, 5901/tcp, 6901/tcp
+adminkasm.lo_8b05f82a	4901/tcp, 5901/tcp, 6901/tcp
+kasm_agent	4444/tcp
+kasm_proxy	80/tcp
+kasm_manager	8181/tcp
+prometheus	9090/tcp
+grafana	3000/tcp
+nginx	0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp
+kasm_api	8080/tcp
+alertmanager	9093/tcp
+alert-bridge	9095/tcp
+kasm_db	5432/tcp
+kasm_redis	6379/tcp
+kasm_guac	
+kasm_share	8182/tcp
+test-website	3000/tcp
+nginx-exporter	9113/tcp
+
+## INPUT chain
+
+-P INPUT ACCEPT
+-A INPUT -j ts-input
+-A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -p icmp -j ACCEPT
+-A INPUT -i lo -j ACCEPT
+-A INPUT -s 172.19.0.0/24 -d 172.19.0.1/32 -p tcp -m tcp --dport 9100 -m comment --comment "prometheus->node_exporter" -j ACCEPT
+-A INPUT -s 172.20.0.0/16 -d 172.20.0.1/32 -p tcp -m tcp --dport 3389 -m comment --comment "kasm-workspace->host-xrdp" -j ACCEPT
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 80 -j ACCEPT
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 443 -j ACCEPT
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT
+-A INPUT -j REJECT --reject-with icmp-host-prohibited
+
+## DOCKER-USER chain
+
+-N DOCKER-USER
